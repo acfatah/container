@@ -20,7 +20,6 @@ use Interop\Container\ContainerInterface;
  * in container.
  *
  * @author Achmad F. Ibrahim <acfatah@gmail.com>
- * @version 0.0.0
  */
 class NewInstance
 {

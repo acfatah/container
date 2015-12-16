@@ -24,7 +24,6 @@ use SplFileObject;
  * @link http://www.htmlist.com/development/extending-php-5-3-closures-with-serialization-and-reflection/
  *
  * @author Achmad F. Ibrahim <acfatah@gmail.com>
- * @version 0.0.0
  */
 final class SerializableClosure implements SerializableInterface
 {
