@@ -10,15 +10,15 @@
  * @license http://opensource.org/licenses/mit-license.php The MIT License (MIT)
  */
 
-namespace Acfatah\Container;
+namespace Acfatah\Container\Exception;
 
 use RuntimeException;
-use Interop\Container\Exception\NotFoundException as InteropNotFoundException;
+use Interop\Container\Exception\ContainerException as ContainerExceptionInterface;
 
 /**
- * @see \Interop\Container\Exception\NotFoundException
+ * @link https://github.com/container-interop/container-interop/blob/master/src/Interop/Container/Exception/ContainerException.php \Interop\Container\Exception\ContainerException
  */
-class NotFoundException extends RuntimeException implements InteropNotFoundException
+class ContainerException extends RuntimeException implements ContainerExceptionInterface
 {
 
 }

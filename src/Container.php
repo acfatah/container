@@ -18,7 +18,7 @@ use Serializable as SerializableInterface;
 use InvalidArgumentException;
 use Interop\Container\ContainerInterface;
 use Acfatah\Container\NewInstance;
-use Acfatah\Container\NotFoundException;
+use Acfatah\Container\Exception\NotFoundException;
 use Acfatah\Container\SerializableClosure;
 
 /**

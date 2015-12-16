@@ -57,7 +57,7 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
 
     public function testGetUndefinedDefinition()
     {
-        $this->setExpectedException('Acfatah\Container\NotFoundException');
+        $this->setExpectedException('Acfatah\Container\Exception\NotFoundException');
 
         $container = $this->createContainer([]);
         $container->get('foo');
