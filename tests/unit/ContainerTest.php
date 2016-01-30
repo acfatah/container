@@ -2,272 +2,539 @@
 
 class ContainerTest extends \PHPUnit_Framework_TestCase
 {
-    public function createContainer($definitions)
+    public function createContainer($resolvers)
     {
-        return new Acfatah\Container\Container($definitions);
+        return new Acfatah\Container\Container($resolvers);
     }
 
-    public function getFoo()
+    public function testGetNamesMethod()
     {
-        return 'foo';
-    }
-
-    public function testHas()
-    {
-        $definitions = [
-            'foo' => function () {
-                return 'foo';
-            }
+        $resolvers = [
+            [
+                'name'      => 'Foo',
+                'resolver'  => function () {
+                    return new stdClass;
+                },
+            ],
+            [
+                'name'      => 'Bar',
+                'resolver'  => 'stdClass'
+            ],
+            [
+                'name'      => 'Baz',
+                'resolver'  => new stdClass
+            ]
         ];
-        $container = $this->createContainer($definitions);
+        $container = $this->createContainer($resolvers);
 
-        $this->assertTrue($container->has('foo'));
-        $this->assertFalse($container->has('bar'));
+        $this->assertSame(['Foo', 'Bar', 'Baz'], $container->getNames());
     }
 
-    public function testGetIdentifiers()
+    public function resolverProvider()
     {
-        $definitions = [
-            'foo' => function () {
-                return 'foo';
-            },
-            'bar' => new stdClass,
-            'baz' => 'baz'
+        return [
+            [
+                // closure
+                function () {
+                    return new stdClass;
+                }
+            ],
+            [
+                // string class name
+                'Fixture\Foo'
+            ]
         ];
-        $container = $this->createContainer($definitions);
-
-        $expected = array_keys($definitions);
-        $this->assertSame($expected, $container->getIndentifiers());
     }
 
-    public function testSetAndRemove()
+    /**
+     * @group set
+     * @group get
+     * @dataProvider resolverProvider
+     */
+    public function testHasSetGetAndRemoveMethods($resolver)
     {
         $container = $this->createContainer([]);
 
-        $this->assertFalse($container->has('foo'));
+        $this->assertFalse($container->has('Foo'));
 
-        $container->set('foo', 'foo');
+        $container->set('Foo', $resolver);
 
-        $this->assertTrue($container->has('foo'));
+        $this->assertTrue($container->has('Foo'));
 
-        $container->remove('foo');
+        $first = $container->get('Foo');
+        $second = $container->get('Foo');
 
-        $this->assertFalse($container->has('foo'));
+        $this->assertNotSame($second, $first);
+
+        $container->remove('Foo');
+
+        $this->assertFalse($container->has('Foo'));
     }
 
-    public function testGetUndefinedDefinition()
+    /**
+     * @group set
+     * @group get
+     * @dataProvider resolverProvider
+     */
+    public function testIssetSetGetAndUnsetAsArray($resolver)
     {
-        $this->setExpectedException('Acfatah\Container\Exception\NotFoundException');
+        $container = $this->createContainer([]);
+
+        $this->assertFalse(isset($container['Foo']));
+
+        $container['Foo'] = $resolver;
+
+        $this->assertTrue(isset($container['Foo']));
+
+        $first = $container['Foo'];
+        $second = $container['Foo'];
+
+        $this->assertNotSame($second, $first);
+
+        unset($container['Foo']);
+
+        $this->assertFalse(isset($container['Foo']));
+    }
+
+    /**
+     * @group set
+     */
+    public function testSetMethodException()
+    {
+        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+
+        $container = $this->createContainer([]);
+        $container->set('Foo', ['foo', 'bar']);
+    }
+
+    /**
+     * @group set
+     * @group get
+     */
+    public function testHasSetGetAndRemoveNewInstance()
+    {
+        $container = $this->createContainer([]);
+
+        $this->assertFalse($container->has('Foo'));
+
+        $instance = new stdClass;
+        $instance->id = md5(mt_rand());
+        $container->set('Foo', $instance);
+
+        $this->assertTrue($container->has('Foo'));
+
+        $first = $container->get('Foo');
+        $second = $container->get('Foo');
+
+        $this->assertSame($second, $first);
+
+        $container->remove('Foo');
+
+        $this->assertFalse($container->has('Foo'));
+    }
+
+    /**
+     * @group set
+     * @group get
+     */
+    public function testSingleMethod()
+    {
+        $container = $this->createContainer([]);
+        $container->single('Single', function () {
+            return new stdClass;
+        });
+
+        $first = $container->get('Single');
+        $second = $container->get('Single');
+
+        $this->assertSame($first, $second);
+
+        $container->remove('Single');
+
+        $this->assertFalse($container->has('Single'));
+    }
+
+    /**
+     * @group set
+     */
+    public function testSetNewMethod()
+    {
+        $container = $this->createContainer([]);
+        $result = false;
+        $container->setNew('New', function () use (&$result) {
+            $result = true;
+            return new stdClass;
+        });
+
+        $this->assertTrue($result);
+    }
+
+    public function invalidArrayConfigurationProvider()
+    {
+        return [
+            [
+                // primitive data
+                'stdClass'
+            ],
+            [
+                // an object
+                new stdClass
+            ],
+            [
+                // a key value array
+                ['Foo' => function () {return new stdClass;}]
+            ],
+            [
+                [
+                    // no name key
+                    'resolver' => function () {return new stdClass;}
+                ]
+            ],
+            [
+                [
+                    // no resolver key
+                    'name' => 'Foo'
+                ]
+            ],
+            [
+                [
+                    // resolver class not exists
+                    'name' => 'Foo',
+                    'resolver' => 'UndefinedClass'
+                ]
+            ],
+        ];
+    }
+
+    /**
+     * @dataProvider invalidArrayConfigurationProvider
+     */
+    public function testSetFromArrayMethodException($config)
+    {
+        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+
+        $container = $this->createContainer([$config]);
+    }
+
+    public function testEagerLoadSetFromArrayMethod()
+    {
+        $container = $this->createContainer([]);
+        $result = false;
+        $container->setFromArray([
+            'name' => 'EagerLoad',
+            'resolver' => function () use (&$result) {
+                $result = true;
+                return new stdClass;
+            },
+            'new' => true
+        ]);
+
+        $this->assertTrue($result);
+    }
+
+    public function testEagerLoadSetFromArrayConfiguration()
+    {
+        $result = false;
+        $container = $this->createContainer([
+            [
+                'name' => 'EagerLoaded',
+                'resolver' => function () use (&$result) {
+                    $result = true;
+                    return new stdClass;
+                },
+                'new' => true
+            ],
+        ]);
+
+        $this->assertTrue($result);
+    }
+
+    public function testSetFromArrayMethodSingleInstance()
+    {
+        $container = $this->createContainer([]);
+        $container->setFromArray([
+            'name' => 'Single',
+            'resolver' => function () {
+                return new stdClass;
+            },
+            'single' => true
+        ]);
+        $first = $container->get('Single');
+        $second = $container->get('Single');
+
+        $this->assertSame($first, $second);
+    }
+
+    /**
+     * @group get
+     */
+    public function testGetUndefinedResolver()
+    {
+        $this->setExpectedException('\Acfatah\Container\Exception\NotFoundException');
 
         $container = $this->createContainer([]);
         $container->get('foo');
     }
 
-    public function testGetAClosure()
+    public function nonObjectResolversProvider()
     {
-        $definition = [
-            'foo' => function () {
-                return 'foo';
-            }
+        return [
+            [
+                function () {
+                    // returns null
+                }
+            ],
+            [
+                function () {
+                    // returns string
+                    return 'foo';
+                }
+            ],
+            [
+                function () {
+                    // returns integer
+                    return 12345;
+                }
+            ],
+            [
+                function () {
+                    // returns double
+                    return 1.2345;
+                }
+            ],
+            [
+                function () {
+                    // returns array
+                    return [];
+                }
+            ],
+            [
+                function () {
+                    // returns boolean
+                    return true;
+                }
+            ],
+            [
+                function () {
+                    // returns resource
+                    return opendir(__DIR__);
+                }
+            ]
         ];
-        $container = $this->createContainer($definition);
+    }
 
-        $this->assertTrue($container->get('foo', false) instanceof \Closure);
-        $this->assertEquals('foo', $container->get('foo'));
-        $this->assertSame($container->get('foo'), $container['foo']);
+    /**
+     * @group get
+     * @dataProvider nonObjectResolversProvider
+     */
+    public function testResolverReturnsNonObject($resolver)
+    {
+        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+
+        $container = $this->createContainer([]);
+        $container->set('Foo', $resolver);
+        $container->get('Foo');
     }
 
     public function testContainerInstancePassedAsArgument()
     {
-        $definitions = [
-            'container' => function ($container) {
-                return $container;
-            }
-        ];
-        $container = $this->createContainer($definitions);
-
-        $this->assertSame($container, $container->get('container'));
-    }
-
-    public function testGetACallable()
-    {
-        $definitions = [
-            'foo' => [$this, 'getFoo']
-        ];
-        $container = $this->createContainer($definitions);
-
-        $this->assertTrue(is_callable($container->get('foo', false)));
-        $this->assertEquals('foo', $container->get('foo'));
-        $this->assertSame($container->get('foo'), $container['foo']);
-    }
-
-    public function testGetAnObjectInstance()
-    {
-        $definitions = ['foo' => new \Fixture\Foo];
-        $container = $this->createContainer($definitions);
-
-        $this->assertTrue($container->get('foo') instanceof \Fixture\Foo);
-        $this->assertSame($container->get('foo'), $container['foo']);
-        $this->assertEquals('foo', $container->get('foo')->getString());
-    }
-
-    public function testRecursiveGet()
-    {
-        $definitions = [
-            'string' => 'foo',
-            'text' => function ($container) {
-                return $container->get('string');
-            },
-            'foo' => function ($container) {
-                return $container->get('text');
-            }
-        ];
-        $container = $this->createContainer($definitions);
-
-        $this->assertEquals('foo', $container->get('foo'));
-    }
-
-    public function testClone()
-    {
-        $foo = new stdClass;
-        $foo->string = 'foo';
-
-        $definitions = [
-            'foo' => $foo,
-            'hello' => 'hello world!'
-        ];
-        $container = $this->createContainer($definitions);
-
-        $clone = clone $container;
-        $foo->string = 'bar';
-
-        $result = $clone->get('foo')->string;
-        $this->assertNotEquals('bar', $result);
-        $this->assertEquals('foo', $result);
-    }
-
-    public function testEagerLoad()
-    {
-        $definitions = [
-            'random' => md5(rand())
-        ];
-        $container = $this->createContainer($definitions);
-        $first = $container->get('random');
-        $second = $container->get('random');
-
-        $this->assertSame($first, $second);
-    }
-
-    public function testLazyLoad()
-    {
-        $definitions = [
-            'random' => function () {
-                return md5(rand());
-            }
-        ];
-        $container = $this->createContainer($definitions);
-        $first = $container->get('random');
-        $second = $container->get('random');
-
-        $this->assertNotSame($first, $second);
-    }
-
-    public function testEagerLoadNewInstance()
-    {
-        $string = null;
-        $definitions = [
-            'foo' => new Acfatah\Container\NewInstance(
-                function (
-                    \Interop\Container\ContainerInterface $container
-                ) use (&$string) {
-                    $string = 'foo';
+        $resolvers = [
+            [
+                'name' => 'Container',
+                'resolver' => function (\Interop\Container\ContainerInterface $container) {
+                    return $container;
                 }
-            )
-        ];
-        $container = $this->createContainer($definitions);
-
-        $this->assertNotNull($string);
-        $this->assertEquals('foo', $string);
-    }
-
-    public function testEagerLoadNewInstanceMethod()
-    {
-        $string = null;
-        $container = $this->createContainer([]);
-        $container->set(
-            'foo',
-            function (
-                \Interop\Container\ContainerInterface $container
-            ) use (&$string) {
-                $string = 'foo';
-            },
-            true
-        );
-
-        $this->assertNotNull($string);
-        $this->assertEquals('foo', $string);
-    }
-
-    public function testMerge()
-    {
-        $container = $this->createContainer([]);
-
-        $definition1 = ['foo' => null];
-        $definition2 = [
-            'foo' => false,
-            'bar' => null
-        ];
-        $definition3 = new \ArrayObject(
-            [
-                'foo' => 'foo',
-                'bar' => 'bar',
-                'baz' => 'baz'
             ]
-        );
+        ];
+        $container = $this->createContainer($resolvers);
 
-        $container->merge($definition1, $definition2, $definition3);
-
-        $this->assertSame(
-            [
-                'foo' => 'foo',
-                'bar' => 'bar',
-                'baz' => 'baz'
-            ],
-            $container->getArrayCopy()
-        );
+        $this->assertSame($container, $container->get('Container'));
     }
 
-    public function testInvalidMerge()
+    /**
+     * @group binding
+     */
+    public function testInterfaceBinding()
     {
-        $this->setExpectedException('InvalidArgumentException');
+        $container = $this->createContainer([]);
+        $container->set('Fixture\FooInterface', function () {
+            return new \Fixture\FooImplemented;
+        });
+        $requireFoo = $container->get('Fixture\RequireFooInterface');
+
+        $this->assertInstanceOf('Fixture\FooInterface', $requireFoo->getFoo());
+    }
+
+    /**
+     * @group binding
+     */
+    public function testInterfaceBindingNotFoundException()
+    {
+        $this->setExpectedException('\Acfatah\Container\Exception\NotFoundException');
 
         $container = $this->createContainer([]);
-
-        $definition1 = [];
-        $definition2 = 'some string';
-
-        $container->merge($definition1, $definition2);
+        $requireFoo = $container->get('Fixture\RequireFooInterface');
     }
 
-    public function testSerializeUnserialize()
+    /**
+     * @group binding
+     */
+    public function testInterfaceBindingException()
     {
-        $definitions = [
-            'foo_string' => 'foo',
-            'foo_object' => new \Fixture\Foo,
-            'foo_closure'   => function () {
-                return new \Fixture\Foo;
-            }
+        $this->setExpectedException('\PHPUnit_Framework_Error');
+
+        $container = $this->createContainer([]);
+        // bind non implemented class
+        $container->set('Fixture\FooInterface', new stdClass);
+        $requireFoo = $container->get('Fixture\RequireFooInterface');
+
+    }
+
+    public function objectBindingProvider()
+    {
+        return [
+            [
+                // callback form
+                function () {
+                    return new Fixture\Bar;
+                }
+            ],
+            [
+                // class name form
+                'Fixture\Bar'
+            ],
+            [
+                // new instance
+                new Fixture\Bar
+            ]
         ];
+    }
 
-        $container = $this->createContainer($definitions);
+    /**
+     * @group binding
+     * @dataProvider objectBindingProvider
+     */
+    public function testObjectBinding($resolver)
+    {
+        $container = $this->createContainer([]);
+        $container->set('Fixture\Foo', $resolver);
+        // inject 'Fixture\Bar'
+        $foo = $container->get('Fixture\RequireFoo');
 
-        $this->assertInstanceOf('Serializable', $container);
+        $this->assertInstanceOf('Fixture\Foo', $foo->getFoo());
+        $this->assertInstanceOf('Fixture\Bar', $foo->getFoo());
+        $this->assertEquals('bar', $foo->getFoo()->getString());
+    }
 
-        $serialized = serialize($container);
-        $unserialized = unserialize($serialized);
+    public function objectBindingExceptionProvider()
+    {
+        return [
+            [
+                // callback form
+                function () {
+                    return new stdClass;
+                }
+            ],
+            [
+                // class name form
+                'stdClass'
+            ],
+            [
+                // new instance
+                new stdClass
+            ]
+        ];
+    }
 
-        $this->assertEquals($unserialized->get('foo_string'), $definitions['foo_string']);
-        $this->assertEquals($unserialized->get('foo_object'), $definitions['foo_object']);
-        $this->assertEquals($unserialized->get('foo_closure'), $definitions['foo_closure']());
+    /**
+     * @group binding
+     * @dataProvider objectBindingExceptionProvider
+     */
+    public function testObjectBindingException($resolver)
+    {
+        $this->setExpectedException('\PHPUnit_Framework_Error');
+
+        $container = $this->createContainer([]);
+        $container->set('Fixture\Foo', $resolver);
+        // inject non 'Fixture\Foo' instance
+        $foo = $container->get('Fixture\RequireFoo');
+    }
+
+    public function testGetObjectConstructorArgumentArrayWithDefaultValue()
+    {
+        $container = $this->createContainer([]);
+        $instance = $container->get('Fixture\ConstructorArgumentArrayWithDefaultValue');
+
+        $this->assertInstanceOf(
+            'Fixture\ConstructorArgumentArrayWithDefaultValue',
+            $instance
+        );
+        $this->assertSame(['foo', 'bar'], $instance->getArray());
+    }
+
+    public function testGetObjectConstructorNotTypeHinted()
+    {
+        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+
+        $container = $this->createContainer([]);
+        $container->get('Fixture\ConstructorArgumentArray');
+    }
+
+    public function testGetObjectConstructorTypeHintClassNotExists()
+    {
+        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+
+        $container = $this->createContainer([]);
+        $container->get('Fixture\TypeHintClassNotExists');
+    }
+
+    /**
+     * @group recursion
+     */
+    public function testRecursiveAutomaticResolution()
+    {
+        // \RuntimeException thrown if fail to inject \Fixture\Foo
+        $container = $this->createContainer([]);
+        $container->get('Fixture\RequireFoo');
+    }
+
+    /**
+     * @group recursion
+     */
+    public function testRecursiveAutomaticResolutionDepthCount()
+    {
+        // \RuntimeException thrown if fail to inject \Fixture\Foo
+        $container = $this->createContainer([]);
+
+        for ($i=0; $i<100; $i++) {
+            $container->get('Fixture\RequireFoo');
+        }
+    }
+
+    /**
+     * @group recursion
+     */
+    public function testInfiniteRecursive()
+    {
+        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+
+        $container = $this->createContainer([]);
+        $container->get('Fixture\InfiniteRecursive');
+    }
+
+    /**
+     * @group recursion
+     */
+    public function testSetMaxDepth()
+    {
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\ContainerException',
+            'Recursive resolution exceeds maximum depth 5 by "Fixture\InfiniteRecursive" class!'
+        );
+
+        $container = $this->createContainer([]);
+        $container->setMaxDepth(5);
+
+        $container->get('Fixture\InfiniteRecursive');
     }
 }

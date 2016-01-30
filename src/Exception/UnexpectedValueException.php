@@ -10,21 +10,14 @@
  * @license http://opensource.org/licenses/mit-license.php The MIT License (MIT)
  */
 
+namespace Acfatah\Container\Exception;
+
+use Acfatah\Container\Exception\ContainerException;
+
 /**
- * Phpunit bootstrap file
- *
- * @author Achmad F. Ibrahim <acfatah@gmail.com>
+ * Thrown when callback returns an unexpected value.
  */
+class UnexpectedValueException extends ContainerException
+{
 
-$autoload = __DIR__ . '/../vendor/autoload.php';
-
-if (!file_exists($autoload)) {
-    die(<<<MSG
- Please run "composer install" to install dependencies and create autoload file.
-
-MSG
-    );
 }
-
-$loader = require $autoload;
-$loader->addPsr4('Fixture\\', 'tests/Fixture');

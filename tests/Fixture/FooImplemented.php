@@ -2,7 +2,9 @@
 
 namespace Fixture;
 
-class Foo
+use Fixture\FooInterface;
+
+class FooImplemented implements FooInterface
 {
     public function getString()
     {
