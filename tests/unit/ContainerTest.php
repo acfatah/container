@@ -381,7 +381,12 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
      */
     public function testInterfaceBindingException()
     {
-        $this->setExpectedException('\PHPUnit_Framework_Error');
+        if (version_compare(PHP_VERSION, '7.0.0') >= 0) {
+            // introduced by php 7
+            $this->setExpectedException('\TypeError');
+        } else {
+            $this->setExpectedException('\PHPUnit_Framework_Error');
+        }
 
         $container = $this->createContainer([]);
         // bind non implemented class
@@ -452,7 +457,12 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
      */
     public function testObjectBindingException($resolver)
     {
-        $this->setExpectedException('\PHPUnit_Framework_Error');
+        if (version_compare(PHP_VERSION, '7.0.0') >= 0) {
+            // introduced by php 7
+            $this->setExpectedException('\TypeError');
+        } else {
+            $this->setExpectedException('\PHPUnit_Framework_Error');
+        }
 
         $container = $this->createContainer([]);
         $container->set('Fixture\Foo', $resolver);
