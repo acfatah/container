@@ -122,7 +122,9 @@ class Container implements ArrayAccess, ContainerInterface
         if (!is_object($instance)) {
             $m = 'Resolver for "%s" returns non object of type "%s"!';
             throw new UnexpectedValueException(sprintf(
-                $m, $name, gettype($instance)
+                $m,
+                $name,
+                gettype($instance)
             ));
         }
         // store single instance
@@ -381,7 +383,9 @@ class Container implements ArrayAccess, ContainerInterface
                 $m = 'Recursive resolution exceeds maximum depth %s by'
                     . ' "%s" class!';
                 throw new ContainerException(sprintf(
-                    $m, $this->maxDepth, $name
+                    $m,
+                    $this->maxDepth,
+                    $name
                 ));
             }
             // create the instance using name as a class name
