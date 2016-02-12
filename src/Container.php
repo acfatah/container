@@ -20,6 +20,7 @@ use Interop\Container\ContainerInterface;
 use Acfatah\Container\Exception\ContainerException;
 use Acfatah\Container\Exception\NotFoundException;
 use Acfatah\Container\Exception\UnexpectedValueException;
+use Acfatah\Container\Exception\InvalidArgumentException;
 
 /**
  * Dependency injection container class.
@@ -53,15 +54,14 @@ class Container implements ArrayAccess, ContainerInterface
     protected $singles = [];
 
     /**
-     * @var int Maximum depth level of automatic resolution.
+     * @var int Maximum recursion count of automatic resolution.
      */
-    protected $maxDepth = 3;
+    protected $maxRecursion = 3;
 
     /**
-     *
-     * @var array Automatic resolution depth count.
+     * @var array Automatic resolution recursion count.
      */
-    private static $depthCount;
+    private static $recursionCount;
 
     /**
      * Constructor.
@@ -76,10 +76,10 @@ class Container implements ArrayAccess, ContainerInterface
         foreach ($configurations as $config) {
             if (!is_array($config)) {
                 // invalid configuration structure
-                $m = 'Resolver configuration is not an array!';
-                throw new ContainerException($m);
+                $msg = 'Resolver configuration is not an array!';
+                throw new ContainerException($msg);
             }
-            $this->setFromArray($config, false);
+            $this->setFromArrayUnresolved($config);
             // eager loading
             if (isset($config['new']) && true === $config['new']) {
                 $newInstances[] = $config['name'];
@@ -116,17 +116,8 @@ class Container implements ArrayAccess, ContainerInterface
         }
         // resolve the instance
         $instance = $this->resolveInstance($name);
-        // reset depth count after creation
-        self::$depthCount = null;
-        // instance is null
-        if (!is_object($instance)) {
-            $m = 'Resolver for "%s" returns non object of type "%s"!';
-            throw new UnexpectedValueException(sprintf(
-                $m,
-                $name,
-                gettype($instance)
-            ));
-        }
+        // reset recursion count after creation
+        self::$recursionCount = null;
         // store single instance
         if (in_array($name, $this->singles)) {
             $this->instance[$name] = $instance;
@@ -240,42 +231,28 @@ class Container implements ArrayAccess, ContainerInterface
 
             return $this;
         }
+        $msg = 'Unable to bind "%s". The resolver is not an object'
+            . ' instance or a callback!';
         // container exception
         if (is_string($resolver) && !class_exists($resolver)) {
-            $m = 'Unable to bind "%s". Class "%s" does not exists!';
-            throw new ContainerException(sprintf($m, $name, $resolver));
-        } else {
-            $m = 'Unable to bind "%s". The resolver is not an object'
-                . ' instance or a callback!';
+            $msg = 'Unable to bind "%s". Class "%s" does not exists!';
+            throw new ContainerException(sprintf($msg, $name, $resolver));
         }
-        throw new ContainerException(sprintf($m, $name));
+        throw new ContainerException(sprintf($msg, $name));
     }
 
     /**
      * Sets a resolver from a configuration array.
      *
      * @param array $config
-     * @param boolean $load Wether to eager load the resolver
      * @return \Acfatah\Container\Container
      * @throws \Acfatah\Container\Exception\ContainerException
      */
-    public function setFromArray(array $config, $load = true)
+    public function setFromArray(array $config)
     {
-        // check "name" key
-        if (!array_key_exists('name', $config)) {
-            // invalid configuration structure, has no name
-            $m = 'Resolver configuration array has no "name" key!';
-            throw new ContainerException($m);
-        }
-        // set resolver
-        if (isset($config['resolver'])) {
-            $this->setResolverFromArray($config);
-        } else {
-            $m = 'Resolver configuration array has no "resolver" key!';
-            throw new ContainerException($m);
-        }
+        $this->setFromArrayUnresolved($config);
         // eager loading
-        if ($load && isset($config['new']) && true === $config['new']) {
+        if (isset($config['new']) && true === $config['new']) {
             $this->instance[$config['name']] = $this->get($config['name']);
         }
 
@@ -315,19 +292,44 @@ class Container implements ArrayAccess, ContainerInterface
     }
 
     /**
-     * Sets the maximum depth level of automatic resolution.
+     * Sets the maximum recursion count of automatic resolution.
      *
      * An object can only create itself multiple time less than the maximum
-     * depth within a single call.
+     * recursion within a single call.
      *
-     * Default value is 3 levels.
+     * The default value is 3 times.
      *
-     * @param int $depth
+     * @param int $count
      * @return \Acfatah\Container\Container
      */
-    public function setMaxDepth($depth)
+    public function setMaxRecursion($count)
     {
-        $this->maxDepth = intval($depth);
+        if (intval($count) < 1) {
+            throw new InvalidArgumentException(
+                'Invalid maximum recursion count!'
+            );
+        }
+        $this->maxRecursion = intval($count);
+
+        return $this;
+    }
+
+    protected function setFromArrayUnresolved(array $config)
+    {
+        // check "name" key
+        if (!array_key_exists('name', $config)) {
+            // invalid configuration structure, has no name
+            $msg = 'Resolver configuration array has no "name" key!';
+            throw new ContainerException($msg);
+        }
+        // check "resolver" key
+        if (!isset($config['resolver'])) {
+            $msg = 'Resolver configuration array has no "resolver" key!';
+            throw new ContainerException($msg);
+
+        }
+        // set resolver
+        $this->setResolverFromArray($config);
 
         return $this;
     }
@@ -338,14 +340,12 @@ class Container implements ArrayAccess, ContainerInterface
      * @param array $config
      * @return \Acfatah\Container\Container
      */
-    protected function setResolverFromArray($config)
+    protected function setResolverFromArray(array $config)
     {
         // check "single" key
-        if (isset($config['single']) && true === $config['single']) {
-            $this->single($config['name'], $config['resolver']);
-        } else {
-            $this->set($config['name'], $config['resolver']);
-        }
+        isset($config['single']) && true === $config['single']
+            ? $this->single($config['name'], $config['resolver'])
+            : $this->set($config['name'], $config['resolver']);
 
         return $this;
     }
@@ -364,36 +364,59 @@ class Container implements ArrayAccess, ContainerInterface
         if (isset($this->resolver[$name])
             && is_callable($this->resolver[$name])
         ) {
-            return call_user_func($this->resolver[$name], $this);
+            $instance = call_user_func($this->resolver[$name], $this);
+            // instance is not an object
+            if (!is_object($instance)) {
+                $msg = 'Resolver for "%s" returns non object of type "%s"!';
+                throw new UnexpectedValueException(sprintf(
+                    $msg, $name, gettype($instance)
+                ));
+            }
+            $this->countRecursion(get_class($instance));
+            return $instance;
         }
         // create instance from bound class name
         if (isset($this->resolver[$name])
             && is_string($this->resolver[$name])
         ) {
+            $this->countRecursion($this->resolver[$name]);
+            // create the instance using resolver as a class name
             return $this->create($this->resolver[$name]);
         }
         // automatic resolution
         if (class_exists($name)) {
-            // memorize depth
-            self::$depthCount[$name] = isset(self::$depthCount[$name])
-                ? self::$depthCount[$name]+1 : 1;
-            // verify depth
-            if (self::$depthCount[$name] > $this->maxDepth) {
-                // throw exception if exceeds maximum depth
-                $m = 'Recursive resolution exceeds maximum depth %s by'
-                    . ' "%s" class!';
-                throw new ContainerException(sprintf(
-                    $m,
-                    $this->maxDepth,
-                    $name
-                ));
-            }
+            $this->countRecursion($name);
             // create the instance using name as a class name
             return $this->create($name);
         }
         // unable to resolve class name or resolver not defined
-        $m = 'Resolver for "%s" is not defined!';
-        throw new NotFoundException(sprintf($m, $name));
+        $msg = 'Resolver for "%s" is not defined!';
+        throw new NotFoundException(sprintf($msg, $name));
+    }
+
+    /**
+     * Count recursion of a class creation.
+     *
+     * @param string $className
+     * @throws ContainerException If exceeds class::maxRecursion
+     */
+    protected function countRecursion($className)
+    {
+        // count increment
+        self::$recursionCount[$className] =
+            isset(self::$recursionCount[$className])
+                ? self::$recursionCount[$className] + 1
+                : 1;
+        // verify count
+        if (self::$recursionCount[$className] > $this->maxRecursion) {
+            // throw exception if exceeds maximum count
+            $msg = 'Class "%s" exceeds maximum recursion count of %s times!';
+            throw new ContainerException(sprintf(
+                $msg,
+                $className,
+                $this->maxRecursion
+            ));
+        }
     }
 
     /**
@@ -437,19 +460,19 @@ class Container implements ArrayAccess, ContainerInterface
                 $reflectionParameter->getClass();
             } catch (ReflectionException $re) {
                 // rethrow as \Acfatah\Container\Exception\ContainerException
-                $m = 'Type-hint error "%s" for "%s" class constructor!';
+                $msg = 'Type-hint error "%s" for "%s" class constructor!';
                 throw new ContainerException(sprintf(
-                    $m,
+                    $msg,
                     $re->getMessage(),
                     $reflectionParameter->getDeclaringClass()->getName()
                 ));
             }
             // argument required but not a type-hinted class name
             if (!$reflectionParameter->getClass() instanceof ReflectionClass) {
-                $m = 'Unable to create constructor argument "%s" for'
+                $msg = 'Unable to create constructor argument "%s" for'
                     . ' "%s" class!';
                 throw new ContainerException(sprintf(
-                    $m,
+                    $msg,
                     $reflectionParameter->getPosition(),
                     $reflectionParameter->getDeclaringClass()->getName()
                 ));

@@ -1,6 +1,15 @@
 Change Log
 ==========
 
+[dev-master] (BC Breaks) - 2016-2-10
+-----------------------------------
+
+### Changed
+- Renamed **setMaxDepth** to **setMaxRecursion**
+
+### Added
+- `Acfatah\Container\Exception\InvalidArgumentException` class
+
 [dev-master] (BC Breaks) - 2015-12-16
 -----------------------------------
 

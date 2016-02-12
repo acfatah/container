@@ -101,7 +101,9 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
      */
     public function testSetMethodException()
     {
-        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\ContainerException'
+        );
 
         $container = $this->createContainer([]);
         $container->set('Foo', ['foo', 'bar']);
@@ -211,7 +213,9 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
      */
     public function testSetFromArrayMethodException($config)
     {
-        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\ContainerException'
+        );
 
         $container = $this->createContainer([$config]);
     }
@@ -270,7 +274,9 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
      */
     public function testGetUndefinedResolver()
     {
-        $this->setExpectedException('\Acfatah\Container\Exception\NotFoundException');
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\NotFoundException'
+        );
 
         $container = $this->createContainer([]);
         $container->get('foo');
@@ -329,7 +335,9 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
      */
     public function testResolverReturnsNonObject($resolver)
     {
-        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\UnexpectedValueException'
+        );
 
         $container = $this->createContainer([]);
         $container->set('Foo', $resolver);
@@ -370,7 +378,9 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
      */
     public function testInterfaceBindingNotFoundException()
     {
-        $this->setExpectedException('\Acfatah\Container\Exception\NotFoundException');
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\NotFoundException'
+        );
 
         $container = $this->createContainer([]);
         $requireFoo = $container->get('Fixture\RequireFooInterface');
@@ -473,7 +483,9 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
     public function testGetObjectConstructorArgumentArrayWithDefaultValue()
     {
         $container = $this->createContainer([]);
-        $instance = $container->get('Fixture\ConstructorArgumentArrayWithDefaultValue');
+        $instance = $container->get(
+            'Fixture\ConstructorArgumentArrayWithDefaultValue'
+        );
 
         $this->assertInstanceOf(
             'Fixture\ConstructorArgumentArrayWithDefaultValue',
@@ -484,7 +496,9 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
 
     public function testGetObjectConstructorNotTypeHinted()
     {
-        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\ContainerException'
+        );
 
         $container = $this->createContainer([]);
         $container->get('Fixture\ConstructorArgumentArray');
@@ -492,7 +506,9 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
 
     public function testGetObjectConstructorTypeHintClassNotExists()
     {
-        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\ContainerException'
+        );
 
         $container = $this->createContainer([]);
         $container->get('Fixture\TypeHintClassNotExists');
@@ -524,27 +540,39 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
     /**
      * @group recursion
      */
-    public function testInfiniteRecursive()
+    public function testInfiniteRecursion()
     {
-        $this->setExpectedException('\Acfatah\Container\Exception\ContainerException');
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\ContainerException'
+        );
 
         $container = $this->createContainer([]);
-        $container->get('Fixture\InfiniteRecursive');
+        $container->get('Fixture\InfiniteRecursion');
     }
 
     /**
      * @group recursion
      */
-    public function testSetMaxDepth()
+    public function testSetMaxRecursion()
     {
         $this->setExpectedException(
             '\Acfatah\Container\Exception\ContainerException',
-            'Recursive resolution exceeds maximum depth 5 by "Fixture\InfiniteRecursive" class!'
+            'Class "Fixture\InfiniteRecursion" exceeds maximum recursion count of 5 times!'
         );
 
         $container = $this->createContainer([]);
-        $container->setMaxDepth(5);
+        $container->setMaxRecursion(5);
 
-        $container->get('Fixture\InfiniteRecursive');
+        $container->get('Fixture\InfiniteRecursion');
+    }
+
+    public function testSetMaxRecursionInvalidArgument()
+    {
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\InvalidArgumentException'
+        );
+
+        $container = $this->createContainer([]);
+        $container->setMaxRecursion(0);
     }
 }
