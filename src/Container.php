@@ -372,7 +372,6 @@ class Container implements ArrayAccess, ContainerInterface
                     $msg, $name, gettype($instance)
                 ));
             }
-            $this->countRecursion(get_class($instance));
             return $instance;
         }
         // create instance from bound class name
