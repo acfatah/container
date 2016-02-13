@@ -117,7 +117,7 @@ class Container implements ArrayAccess, ContainerInterface
         // resolve the instance
         $instance = $this->resolveInstance($name);
         // reset recursion count after creation
-        self::$recursionCount = null;
+        $this->resetRecursionCount();
         // store single instance
         if (in_array($name, $this->singles)) {
             $this->instance[$name] = $instance;
@@ -417,6 +417,14 @@ class Container implements ArrayAccess, ContainerInterface
                 $this->maxRecursion
             ));
         }
+    }
+
+    /**
+     * Resets recursion count.
+     */
+    protected function resetRecursionCount()
+    {
+        self::$recursionCount = null;
     }
 
     /**

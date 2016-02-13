@@ -527,7 +527,7 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
     /**
      * @group recursion
      */
-    public function testRecursiveAutomaticResolutionDepthCount()
+    public function testRecursiveAutomaticResolutionRecursionCount()
     {
         // \RuntimeException thrown if fail to inject \Fixture\Foo
         $container = $this->createContainer([]);

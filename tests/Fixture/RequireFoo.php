@@ -12,7 +12,7 @@ class RequireFoo
     public function __construct(Foo $foo)
     {
         if (!$foo instanceof Foo) {
-            throw new RuntimeException('Constructor is not an instance of \Fixture\Foo');
+            throw new RuntimeException('Constructor argument is not an instance of \Fixture\Foo');
         }
 
         $this->foo = $foo;
