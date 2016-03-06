@@ -1,8 +1,24 @@
 Change Log
 ==========
 
+[dev-master] (BC Breaks) - 2016-2-26
+------------------------------------
+
+### Changed
+- Renamed **getNames** to **getResolvers**
+
+### Added
+- `Acfatah\Container\Resolver\AbstractContainer` class
+- `Acfatah\Container\Resolver\AbstractResolver` class
+- `Acfatah\Container\Resolver\CallbackResolver` used to resolve a callback
+  resolver
+  `Acfatah\Container\Resolver\ReflectionResolver` used to resolve a class name
+  resolver
+- Both classes extends `Acfatah\Container\Resolver\AbstractResolver` class
+- `Acfatah\Container\Resolver\Config` class used to resolve array configuration
+
 [dev-master] (BC Breaks) - 2016-2-10
------------------------------------
+------------------------------------
 
 ### Changed
 - Renamed **setMaxDepth** to **setMaxRecursion**
@@ -11,7 +27,7 @@ Change Log
 - `Acfatah\Container\Exception\InvalidArgumentException` class
 
 [dev-master] (BC Breaks) - 2015-12-16
------------------------------------
+-------------------------------------
 
 ### Changed
 - Container is no longer serializable
@@ -32,7 +48,7 @@ Change Log
 - Removed `Acfatah\Container\SerializableClosure` class
 
 [dev-master] - 2015-12-17
------------------------
+-------------------------
 
 ### Changed
 - Moved `Acfatah\Container\NotFoundException` to
@@ -44,7 +60,9 @@ Change Log
 * Added `Acfatah\Container\Exception\ContainerException` class
 
 [dev-master] - 2015-06-15
------------------------
+-------------------------
 
 ### Added
 - Initial development
+
+[dev-master]: https://github.com/acfatah/container

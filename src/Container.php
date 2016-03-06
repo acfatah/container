@@ -11,15 +11,13 @@
  */
 
 namespace Acfatah\Container;
-
-use ArrayAccess;
-use ReflectionClass;
-use ReflectionMethod;
-use ReflectionException;
-use Interop\Container\ContainerInterface;
+use Acfatah\Container\AbstractContainer;
+use Acfatah\Container\Resolver\Config;
+use Acfatah\Container\Resolver\AbstractResolver;
+use Acfatah\Container\Resolver\CallableResolver;
+use Acfatah\Container\Resolver\ReflectionResolver;
 use Acfatah\Container\Exception\ContainerException;
 use Acfatah\Container\Exception\NotFoundException;
-use Acfatah\Container\Exception\UnexpectedValueException;
 use Acfatah\Container\Exception\InvalidArgumentException;
 
 /**
@@ -30,23 +28,19 @@ use Acfatah\Container\Exception\InvalidArgumentException;
  *
  * Simply, resolver is a callback used to create an object instance and inject
  * its dependencies either by constructor or method injection. The container
- * reference is passed as an argument to the callback.
+ * reference is passed as an argument to the callback and can be used to
+ * resolve other dependant objects.
  *
- * It can also be a class name. The container will  automagically create
+ * It can also be a class name string. The container will automagically create
  * the class dependencies that can be type-hinted and inject them by
  * constructor injection.
  */
-class Container implements ArrayAccess, ContainerInterface
+class Container extends AbstractContainer
 {
     /**
-     * @var array An array of callbacks or bound class name.
+     * @var \Acfatah\Container\ResolverInterface[] An array of resolvers.
      */
     protected $resolver;
-
-    /**
-     * @var array Loaded instances.
-     */
-    protected $instance;
 
     /**
      * @var array An array of singleton resolver names.
@@ -59,11 +53,6 @@ class Container implements ArrayAccess, ContainerInterface
     protected $maxRecursion = 3;
 
     /**
-     * @var array Automatic resolution recursion count.
-     */
-    private static $recursionCount;
-
-    /**
      * Constructor.
      *
      * @param array $configurations An array of resolvers
@@ -74,171 +63,164 @@ class Container implements ArrayAccess, ContainerInterface
         // initialize configurations
         $newInstances = [];
         foreach ($configurations as $config) {
+            // configuration is not an array
             if (!is_array($config)) {
-                // invalid configuration structure
                 $msg = 'Resolver configuration is not an array!';
                 throw new ContainerException($msg);
             }
-            $this->setFromArrayUnresolved($config);
-            // eager loading
-            if (isset($config['new']) && true === $config['new']) {
-                $newInstances[] = $config['name'];
+
+            $config = new Config($config);
+
+            // check single
+            $config->isSingle()
+                ? $this->single($config->getClass(), $config->getResolver())
+                : $this->set($config->getClass(), $config->getResolver());
+
+            // eager loading flag
+            if ($config->isNew()) {
+                $newInstances[] = $config->getClass();
             }
         }
+
         // eager load resolvers after initialization
-        foreach ($newInstances as $name) {
-            $this->instance[$name] = $this->get($name);
+        foreach ($newInstances as $class) {
+            $this->resolver[$class] = $this->get($class);
         }
     }
 
     /**
-     * Resolve the object instance.
+     * Creates an object and resolve its dependencies.
      *
-     * If a name is bound, the resolver will be invoked as a callback.
-     * If not then the name itself will be resolved as a class name.
+     * If a class is bound, the container will use the resolver to resolve the
+     * object. If not then the class name itself will be used to resolved the
+     * object.
      *
-     * The container referrence will be passed as an argument to the callback
-     * if the resolver is callable.
+     * The container instance will be passed as an argument to the callback
+     * if the resolver is a callable.
      *
      * > Note: Since Container implements ArrayAccess, accessing it as an array
      * > invokes this method.
      *
-     * @param string $name
+     * @param string $class
      * @return mixed
      * @throws \Acfatah\Container\Exception\UnexpectedValueException
      * @link https://github.com/container-interop/container-interop/blob/master/src/Interop/Container/ContainerInterface.php
      */
-    public function get($name)
+    public function get($class)
     {
-        // return new or single instance if already created
-        if (isset($this->instance[$name])) {
-            return $this->instance[$name];
+        // resolver is not set
+        if (!isset($this->resolver[$class])) {
+            // but class exists
+            if (class_exists($class)) {
+                // create a new class instance
+                return $this->classnameResolver($class)->resolve();
+            }
+            $msg = 'Resolver for "%s" is not defined!';
+            throw new NotFoundException(sprintf($msg, $class));
         }
-        // resolve the instance
-        $instance = $this->resolveInstance($name);
-        // reset recursion count after creation
-        $this->resetRecursionCount();
-        // store single instance
-        if (in_array($name, $this->singles)) {
-            $this->instance[$name] = $instance;
+
+        // resolver is a class instance
+        if (!$this->resolver[$class] instanceof AbstractResolver) {
+            return $this->resolver[$class];
         }
-        return $instance;
+
+        // resolver is a single instance
+        if (in_array($class, $this->singles)) {
+                $this->resolver[$class] = $this->resolver[$class]->resolve();
+                return $this->resolver[$class];
+            }
+
+        // resolve
+        return $this->resolver[$class]->resolve();
     }
 
     /**
-     * Gets names of all registered resolvers.
+     * Gets class names of all defined resolvers.
      *
-     * @return array
+     * @return string[]
      */
-    public function getNames()
+    public function getResolvers()
     {
-        return array_merge(
-            array_keys($this->resolver),
-            array_keys($this->instance)
-        );
+        return array_keys($this->resolver);
     }
 
     /**
      * @link https://github.com/container-interop/container-interop/blob/master/src/Interop/Container/ContainerInterface.php
      */
-    public function has($name)
+    public function has($class)
     {
-        return isset($this->instance[$name]) || isset($this->resolver[$name]);
+        return isset($this->resolver[$class]);
     }
 
     /**
-     * @link http://php.net/manual/en/arrayaccess.offsetexists.php
-     */
-    public function offsetExists($offset)
-    {
-        return $this->has($offset);
-    }
-
-    /**
-     * @link http://php.net/manual/en/arrayaccess.offsetget.php
-     */
-    public function offsetGet($offset)
-    {
-        return $this->get($offset);
-    }
-
-    /**
-     * @link http://php.net/manual/en/arrayaccess.offsetset.php
-     */
-    public function offsetSet($offset, $value)
-    {
-        $this->set($offset, $value);
-    }
-
-    /**
-     * @link http://php.net/manual/en/arrayaccess.offsetunset.php
-     */
-    public function offsetUnset($offset)
-    {
-        $this->remove($offset);
-    }
-
-    /**
-     * Removes a resolver.
+     * Removes a class resolver.
      *
-     * @param string $name
+     * @param string $class
      * @return \Acfatah\Container\Container
      */
-    public function remove($name)
+    public function remove($class)
     {
-        // remove instance if any
-        unset($this->instance[$name]);
-        // remove resolver
-        unset($this->resolver[$name]);
-        // remove single
-        $pos = array_search($name, $this->singles);
+        // remove single flag
+        $pos = array_search($class, $this->singles);
         if (false !== $pos) {
             unset($this->singles[$pos]);
         }
+
+        // remove the resolver
+        unset($this->resolver[$class]);
 
         return $this;
     }
 
     /**
-     * Sets a resolver to a name.
+     * Sets a class resolver.
      *
-     * @param string $name
+     * @param string $class
      * @param mixed $resolver An object instance, a string class name
      *  or a callback
      * @return \Acfatah\Container\Container
      * @throws \Acfatah\Container\Exception\ContainerException
      */
-    public function set($name, $resolver)
+    public function set($class, $resolver)
     {
         // clear previous state if already being set
-        $this->remove($name);
+        $this->remove($class);
+
         // an object instance
         if (is_object($resolver) && !is_callable($resolver)) {
-            $this->instance[$name] = $resolver;
+            $this->resolver[$class] = $resolver;
 
             return $this;
         }
+
         // a callable
         if (is_callable($resolver)) {
-            $this->resolver[$name] = $resolver;
+            $this->resolver[$class] = $this->callbackResolver(
+                $class,
+                $resolver
+            );
 
             return $this;
         }
+
         // a string class name
-        if (is_string($resolver) && class_exists($resolver)
-        ) {
-            $this->resolver[$name] = $resolver;
+        if (is_string($resolver) && class_exists($resolver)) {
+            $this->resolver[$class] = $this->classnameResolver($resolver);
 
             return $this;
         }
-        $msg = 'Unable to bind "%s". The resolver is not an object'
-            . ' instance or a callback!';
-        // container exception
+
+        // invalid string resolver
         if (is_string($resolver) && !class_exists($resolver)) {
             $msg = 'Unable to bind "%s". Class "%s" does not exists!';
-            throw new ContainerException(sprintf($msg, $name, $resolver));
+            throw new ContainerException(sprintf($msg, $class, $resolver));
         }
-        throw new ContainerException(sprintf($msg, $name));
+
+        // invalid resolver
+        $msg = 'Unable to bind "%s". The resolver is not an object'
+            . ' instance or a callback!';
+        throw new ContainerException(sprintf($msg, $class));
+
     }
 
     /**
@@ -250,11 +232,19 @@ class Container implements ArrayAccess, ContainerInterface
      */
     public function setFromArray(array $config)
     {
-        $this->setFromArrayUnresolved($config);
-        // eager loading
-        if (isset($config['new']) && true === $config['new']) {
-            $this->instance[$config['name']] = $this->get($config['name']);
+        $resolver = new Config($config);
+
+        // new instance
+        if ($resolver->isNew()) {
+            $this->setNew($resolver->getClass(), $resolver->getResolver());
+
+            return $this;
         }
+
+        // single instance
+        $resolver->isSingle()
+            ? $this->single($resolver->getClass(), $resolver->getResolver())
+            : $this->set($resolver->getClass(), $resolver->getResolver());
 
         return $this;
     }
@@ -262,14 +252,14 @@ class Container implements ArrayAccess, ContainerInterface
     /**
      * Sets a resolver to return singleton instance.
      *
-     * @param string $name
+     * @param string $class
      * @param callable|string $resolver
      * @return \Acfatah\Container\Container
      */
-    public function single($name, $resolver)
+    public function single($class, $resolver)
     {
-        $this->set($name, $resolver);
-        $this->singles[] = $name;
+        $this->set($class, $resolver);
+        $this->singles[] = $class;
 
         return $this;
     }
@@ -279,14 +269,16 @@ class Container implements ArrayAccess, ContainerInterface
      *
      * >> Note: New instance is always a single instance.
      *
-     * @param string $name
+     * @param string $class
      * @param callable|string $resolver
      * @return \Acfatah\Container\Container
      */
-    public function setNew($name, $resolver)
+    public function setNew($class, $resolver)
     {
-        $this->set($name, $resolver);
-        $this->instance[$name] = $this->get($name);
+        $this->set($class, $resolver);
+        if ($this->resolver[$class] instanceof AbstractResolver) {
+            $this->resolver[$class] = $this->resolver[$class]->resolve();
+        }
 
         return $this;
     }
@@ -314,181 +306,26 @@ class Container implements ArrayAccess, ContainerInterface
         return $this;
     }
 
-    protected function setFromArrayUnresolved(array $config)
-    {
-        // check "name" key
-        if (!array_key_exists('name', $config)) {
-            // invalid configuration structure, has no name
-            $msg = 'Resolver configuration array has no "name" key!';
-            throw new ContainerException($msg);
-        }
-        // check "resolver" key
-        if (!isset($config['resolver'])) {
-            $msg = 'Resolver configuration array has no "resolver" key!';
-            throw new ContainerException($msg);
-
-        }
-        // set resolver
-        $this->setResolverFromArray($config);
-
-        return $this;
-    }
-
     /**
-     * Sets a resolver from a configuration array.
-     *
-     * @param array $config
-     * @return \Acfatah\Container\Container
-     */
-    protected function setResolverFromArray(array $config)
-    {
-        // check "single" key
-        isset($config['single']) && true === $config['single']
-            ? $this->single($config['name'], $config['resolver'])
-            : $this->set($config['name'], $config['resolver']);
-
-        return $this;
-    }
-
-    /**
-     * Resolve a name as a class instance.
-     *
-     * @param string $name
-     * @return mixed
-     * @throws \Acfatah\Container\Exception\ContainerException
-     * @throws \Acfatah\Container\Exception\NotFoundException
-     */
-    protected function resolveInstance($name)
-    {
-        // invoke callback if callable
-        if (isset($this->resolver[$name])
-            && is_callable($this->resolver[$name])
-        ) {
-            $instance = call_user_func($this->resolver[$name], $this);
-            // instance is not an object
-            if (!is_object($instance)) {
-                $msg = 'Resolver for "%s" returns non object of type "%s"!';
-                throw new UnexpectedValueException(sprintf(
-                    $msg, $name, gettype($instance)
-                ));
-            }
-            return $instance;
-        }
-        // create instance from bound class name
-        if (isset($this->resolver[$name])
-            && is_string($this->resolver[$name])
-        ) {
-            $this->countRecursion($this->resolver[$name]);
-            // create the instance using resolver as a class name
-            return $this->create($this->resolver[$name]);
-        }
-        // automatic resolution
-        if (class_exists($name)) {
-            $this->countRecursion($name);
-            // create the instance using name as a class name
-            return $this->create($name);
-        }
-        // unable to resolve class name or resolver not defined
-        $msg = 'Resolver for "%s" is not defined!';
-        throw new NotFoundException(sprintf($msg, $name));
-    }
-
-    /**
-     * Count recursion of a class creation.
-     *
-     * @param string $className
-     * @throws ContainerException If exceeds class::maxRecursion
-     */
-    protected function countRecursion($className)
-    {
-        // count increment
-        self::$recursionCount[$className] =
-            isset(self::$recursionCount[$className])
-                ? self::$recursionCount[$className] + 1
-                : 1;
-        // verify count
-        if (self::$recursionCount[$className] > $this->maxRecursion) {
-            // throw exception if exceeds maximum count
-            $msg = 'Class "%s" exceeds maximum recursion count of %s times!';
-            throw new ContainerException(sprintf(
-                $msg,
-                $className,
-                $this->maxRecursion
-            ));
-        }
-    }
-
-    /**
-     * Resets recursion count.
-     */
-    protected function resetRecursionCount()
-    {
-        self::$recursionCount = null;
-    }
-
-    /**
-     * Create an object instance based on class name.
+     * Creates a resolver class instance from a class name.
      *
      * @param string $class
-     * @return mixed
+     * @return \Acfatah\Container\Resolver\ReflectionResolver
      */
-    protected function create($class)
+    protected function classnameResolver($class)
     {
-        $reflectionClass = new ReflectionClass($class);
-        $constructor = $reflectionClass->getConstructor();
-        // resolve constructor parameter if any
-        if (isset($constructor)) {
-            return $reflectionClass->newInstanceArgs(
-                $this->resolveParameters($constructor)
-            );
-        }
-        return $reflectionClass->newInstance();
+        return new ReflectionResolver($this, $class, $this->maxRecursion);
     }
 
     /**
-     * Resolve an object parameters.
+     * Creates a resolver class instance from a callback.
      *
-     * @param ReflectionMethod $constructor
-     * @return array
-     * @throws \Acfatah\Container\Exception\ContainerException
+     * @param string $class
+     * @param callable $callback
+     * @return \Acfatah\Container\Resolver\CallableResolver
      */
-    protected function resolveParameters(ReflectionMethod $constructor)
+    protected function callbackResolver($class, $callback)
     {
-        $arguments = [];
-        /* @var $reflectionParameter \ReflectionParameter */
-        foreach ($constructor->getParameters() as $reflectionParameter) {
-            // use default value if available
-            if ($reflectionParameter->isDefaultValueAvailable()) {
-                $arguments[] = $reflectionParameter->getDefaultValue();
-                continue;
-            }
-            // check if type-hint class exists
-            try {
-                $reflectionParameter->getClass();
-            } catch (ReflectionException $re) {
-                // rethrow as \Acfatah\Container\Exception\ContainerException
-                $msg = 'Type-hint error "%s" for "%s" class constructor!';
-                throw new ContainerException(sprintf(
-                    $msg,
-                    $re->getMessage(),
-                    $reflectionParameter->getDeclaringClass()->getName()
-                ));
-            }
-            // argument required but not a type-hinted class name
-            if (!$reflectionParameter->getClass() instanceof ReflectionClass) {
-                $msg = 'Unable to create constructor argument "%s" for'
-                    . ' "%s" class!';
-                throw new ContainerException(sprintf(
-                    $msg,
-                    $reflectionParameter->getPosition(),
-                    $reflectionParameter->getDeclaringClass()->getName()
-                ));
-            }
-            // resolve type-hint argument from container
-            $arguments[] = $this->get(
-                $reflectionParameter->getClass()->getName()
-            );
-        }
-        return $arguments;
+        return new CallableResolver($this, $class, $callback);
     }
 }

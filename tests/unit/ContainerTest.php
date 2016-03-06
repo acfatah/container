@@ -7,27 +7,27 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
         return new Acfatah\Container\Container($resolvers);
     }
 
-    public function testGetNamesMethod()
+    public function testGetResolversMethod()
     {
         $resolvers = [
             [
-                'name'      => 'Foo',
+                'class'      => 'Foo',
                 'resolver'  => function () {
                     return new stdClass;
                 },
             ],
             [
-                'name'      => 'Bar',
+                'class'      => 'Bar',
                 'resolver'  => 'stdClass'
             ],
             [
-                'name'      => 'Baz',
+                'class'      => 'Baz',
                 'resolver'  => new stdClass
             ]
         ];
         $container = $this->createContainer($resolvers);
 
-        $this->assertSame(['Foo', 'Bar', 'Baz'], $container->getNames());
+        $this->assertSame(['Foo', 'Bar', 'Baz'], $container->getResolvers());
     }
 
     public function resolverProvider()
@@ -188,20 +188,20 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
             ],
             [
                 [
-                    // no name key
+                    // no class key
                     'resolver' => function () {return new stdClass;}
                 ]
             ],
             [
                 [
                     // no resolver key
-                    'name' => 'Foo'
+                    'class' => 'Foo'
                 ]
             ],
             [
                 [
                     // resolver class not exists
-                    'name' => 'Foo',
+                    'class' => 'Foo',
                     'resolver' => 'UndefinedClass'
                 ]
             ],
@@ -225,7 +225,7 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
         $container = $this->createContainer([]);
         $result = false;
         $container->setFromArray([
-            'name' => 'EagerLoad',
+            'class' => 'EagerLoad',
             'resolver' => function () use (&$result) {
                 $result = true;
                 return new stdClass;
@@ -241,7 +241,7 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
         $result = false;
         $container = $this->createContainer([
             [
-                'name' => 'EagerLoaded',
+                'class' => 'EagerLoaded',
                 'resolver' => function () use (&$result) {
                     $result = true;
                     return new stdClass;
@@ -257,7 +257,7 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
     {
         $container = $this->createContainer([]);
         $container->setFromArray([
-            'name' => 'Single',
+            'class' => 'Single',
             'resolver' => function () {
                 return new stdClass;
             },
@@ -348,7 +348,7 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
     {
         $resolvers = [
             [
-                'name' => 'Container',
+                'class' => 'Container',
                 'resolver' => function (\Interop\Container\ContainerInterface $container) {
                     return $container;
                 }
