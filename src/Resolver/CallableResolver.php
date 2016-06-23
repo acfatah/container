@@ -14,6 +14,7 @@ namespace Acfatah\Container\Resolver;
 
 use Interop\Container\ContainerInterface;
 use Acfatah\Container\Resolver\AbstractResolver;
+use Acfatah\Container\Exception\ContainerException;
 use Acfatah\Container\Exception\UnexpectedValueException;
 
 /**
@@ -39,6 +40,16 @@ class CallableResolver extends AbstractResolver
     protected $callback;
 
     /**
+     * @var int Maximum recursion count of automatic resolution.
+     */
+    protected $maxRecursion;
+
+    /**
+     * @var array Recursion count.
+     */
+    private static $recursionCount;
+
+    /**
      * Constructor.
      *
      * @param \Acfatah\Container\Resolver\ContainerInterface $container
@@ -48,11 +59,13 @@ class CallableResolver extends AbstractResolver
     public function __construct(
         ContainerInterface $container,
         $className,
-        $callback
+        $callback,
+        $maxRecursion
     ) {
         $this->container = $container;
         $this->className = $className;
         $this->callback = $callback;
+        $this->maxRecursion = $maxRecursion;
     }
 
     /**
@@ -62,6 +75,7 @@ class CallableResolver extends AbstractResolver
      */
     public function resolve()
     {
+        $this->increaseRecursionCount();
         // resolve the instance
         $instance = call_user_func($this->callback, $this->container);
         // instance is not an object
@@ -73,6 +87,41 @@ class CallableResolver extends AbstractResolver
                 gettype($instance)
             ));
         }
+        $this->resetRecursionCount();
         return $instance;
+    }
+
+    /**
+     * Increases recursion count.
+     *
+     * @throws \Acfatah\Container\Exception\ContainerException
+     */
+    protected function increaseRecursionCount()
+    {
+        $hash = spl_object_hash($this);
+        // increment
+        self::$recursionCount[$this->className][$hash] =
+            isset(self::$recursionCount[$this->className][$hash])
+                ? self::$recursionCount[$this->className][$hash] + 1
+                : 1;
+        if (self::$recursionCount[$this->className][$hash] > $this->maxRecursion) {
+            // throw exception if exceeds maximum count
+            $msg = 'Class "%s" exceeds maximum recursion count of %s times!';
+            throw new ContainerException(sprintf(
+                $msg,
+                $this->className,
+                $this->maxRecursion
+            ));
+        }
+
+    }
+
+    /**
+     * Resets recursion count.
+     */
+    protected function resetRecursionCount()
+    {
+        //self::$recursionCount = null;
+        unset(self::$recursionCount[$this->className]);
     }
 }

@@ -1,6 +1,12 @@
 Change Log
 ==========
 
+[dev-master] 2016-6-23
+----------------------
+
+### Changed
+- **setMaxDepth** now works on callable or closure resolver
+
 [dev-master] (BC Breaks) - 2016-2-26
 ------------------------------------
 

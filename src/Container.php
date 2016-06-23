@@ -326,6 +326,6 @@ class Container extends AbstractContainer
      */
     protected function callbackResolver($class, $callback)
     {
-        return new CallableResolver($this, $class, $callback);
+        return new CallableResolver($this, $class, $callback, $this->maxRecursion);
     }
 }

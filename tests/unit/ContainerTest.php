@@ -575,4 +575,31 @@ class ContainerTest extends \PHPUnit_Framework_TestCase
         $container = $this->createContainer([]);
         $container->setMaxRecursion(0);
     }
+
+    /**
+     * @group recursion
+     */
+    public function testInfiniteRecursionCallbackResolver()
+    {
+        $this->setExpectedException(
+            '\Acfatah\Container\Exception\ContainerException'
+        );
+
+        $container = $this->createContainer([
+            [
+                'class' => 'Foo',
+                'resolver' => function ($c) {
+                    return $c->get('Bar');
+                }
+            ],
+            [
+                'class' => 'Bar',
+                'resolver' => function ($c) {
+                    return $c->get('Foo');
+                }
+            ]
+        ]);
+
+        $container->get('Foo');
+    }
 }
