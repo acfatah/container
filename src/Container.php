@@ -296,12 +296,13 @@ class Container extends AbstractContainer
      */
     public function setMaxRecursion($count)
     {
-        if (intval($count) < 1) {
+        $count = intval($count);
+        if ($count < 1) {
             throw new InvalidArgumentException(
                 'Invalid maximum recursion count!'
             );
         }
-        $this->maxRecursion = intval($count);
+        $this->maxRecursion = $count;
 
         return $this;
     }
