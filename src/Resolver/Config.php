@@ -22,7 +22,7 @@ use Acfatah\Container\Exception\ContainerException;
  * - **class**    : The class name string
  * - **resolver** : The resolver. Can be an object, a callable, or a class name
  *   string
- * - **single**   : Whether to resolver is a single instance
+ * - **single**   : Whether the resolver is a single instance
  * - **new**      : Whether the resolver is a new instance
  *
  * @author Achmad F. Ibrahim <acfatah@gmail.com>
